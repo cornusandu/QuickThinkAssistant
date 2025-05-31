@@ -18,27 +18,24 @@ class Attention(nn.Module):
         )
         
     def forward(self, x):
-        # Handle different input dimensions
+        if len(x) > self.input_size:
+            x = x[len(x) - self.input_size, -1]
+        elif len(x) < self.input_size:
+            x = nn.functional.pad(x, (0, self.input_size - len(x)), value = 0)
+
+        # Handle 1D input (sequence of tokens)
         if x.dim() == 1:
-            # If 1D (just features), add batch and sequence dimensions
-            x = x.unsqueeze(0).unsqueeze(0)
-        elif x.dim() == 2:
-            # If 2D (sequence, features), add batch dimension
-            x = x.unsqueeze(0)
+            # Reshape to (batch=1, seq_len=1, embed_dim)
+            x = x.view(1, -1, 1)  # First reshape to (1, seq_len, 1)
+            x = x.expand(-1, -1, self.input_size)  # Expand to proper embedding size
         
-        # Ensure the feature dimension matches input_size
+        # Pad if necessary
         if x.size(-1) != self.input_size:
-            if x.size(-1) > self.input_size:
-                # Truncate if larger than expected
-                x = x[..., :self.input_size]
-            else:
-                # Pad if smaller than expected
-                padding_size = self.input_size - x.size(-1)
-                x = nn.functional.pad(x, (0, padding_size))
-            
+            x = nn.functional.pad(x, (0, self.input_size - x.size(-1)))
+        
         # MultiheadAttention expects (batch, seq_len, embed_dim)
         attn_output, _ = self.attention(x, x, x)
-        return attn_output  # Keep dimensions consistent for LSTM
+        return attn_output.squeeze(0)  # Remove batch dimension if it was added
 
 class Encoder(nn.Module):
     def __init__(self, input_size: int, heads: int, layers: int, output_size: int):
@@ -49,7 +46,16 @@ class Encoder(nn.Module):
         self.linear = nn.Linear(output_size, output_size)
 
     def forward(self, x):
-        # Attention layer will handle dimensionality and size adjustments
+        if len(x) > self.input_size:
+            x = x[-self.input_size:]
+        elif len(x) < self.input_size:
+            x = nn.functional.pad(x, (0, self.input_size - len(x)), value = 0)
+        
+        # Handle input size mismatch before passing to attention layer
+        if x.dim() == 1:
+            # If input is 1D, reshape to 3D (batch=1, seq_len=1, features)
+            x = x.unsqueeze(0).unsqueeze(0)
+        
         x = self.attn(x)
         x, _ = self.lstm(x)
         x = self.linear(x)
@@ -71,6 +77,10 @@ class EncodeDecodeWrapper(nn.Module):
         super(EncodeDecodeWrapper, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
+
+    def forward(self, x):
+        x = self.encoder(x)
+        return self.decoder(x)
 
     def forward(self, x):
         x = self.encoder(x)

@@ -18,19 +18,27 @@ class Attention(nn.Module):
         )
         
     def forward(self, x):
-        # Handle 1D input (sequence of tokens)
+        # Handle different input dimensions
         if x.dim() == 1:
-            # Reshape to (batch=1, seq_len=1, embed_dim)
-            x = x.view(1, -1, 1)  # First reshape to (1, seq_len, 1)
-            x = x.expand(-1, -1, self.input_size)  # Expand to proper embedding size
+            # If 1D (just features), add batch and sequence dimensions
+            x = x.unsqueeze(0).unsqueeze(0)
+        elif x.dim() == 2:
+            # If 2D (sequence, features), add batch dimension
+            x = x.unsqueeze(0)
         
-        # Pad if necessary
+        # Ensure the feature dimension matches input_size
         if x.size(-1) != self.input_size:
-            x = nn.functional.pad(x, (0, self.input_size - x.size(-1)))
-        
+            if x.size(-1) > self.input_size:
+                # Truncate if larger than expected
+                x = x[..., :self.input_size]
+            else:
+                # Pad if smaller than expected
+                padding_size = self.input_size - x.size(-1)
+                x = nn.functional.pad(x, (0, padding_size))
+            
         # MultiheadAttention expects (batch, seq_len, embed_dim)
         attn_output, _ = self.attention(x, x, x)
-        return attn_output.squeeze(0)  # Remove batch dimension if it was added
+        return attn_output  # Keep dimensions consistent for LSTM
 
 class Encoder(nn.Module):
     def __init__(self, input_size: int, heads: int, layers: int, output_size: int):
@@ -41,6 +49,7 @@ class Encoder(nn.Module):
         self.linear = nn.Linear(output_size, output_size)
 
     def forward(self, x):
+        # Attention layer will handle dimensionality and size adjustments
         x = self.attn(x)
         x, _ = self.lstm(x)
         x = self.linear(x)

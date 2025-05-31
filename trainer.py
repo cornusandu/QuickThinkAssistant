@@ -38,13 +38,13 @@ if __name__ == "__main__":
             data = json.load(f)["encoder"]
         
         for i in range(len(data)):
-            data[i] = torch.Tensor(tokenizer.encode(data[i]), dtype=torch.float32)
+            data[i] = torch.tensor(tokenizer.encode(data[i]), dtype=torch.float32)
 
         for epoch in tqdm.tqdm(range(epochs)):
             for i in data:
                 optimizer.zero_grad()
-                output = wrapper(torch.tensor(i))
-                loss = criterion(output, torch.tensor(i))
+                output = wrapper(i)  # i is already a tensor
+                loss = criterion(output, i)
                 loss.backward()
                 optimizer.step()
 

@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import utils
 from transformers import AutoTokenizer
+import json
 
 if __name__ == "__main__":
     print("Which would you like to train?")
@@ -33,11 +34,11 @@ if __name__ == "__main__":
         epochs = 1000
 
         data = []
-        while True:
-            i = input("Add Data: ")
-            if not i:
-                break
-            data.append(tokenizer.encode(i))
+        with open("data.json", "r") as f:
+            data = json.load(f)["encoder"]
+        
+        for i in range(len(data)):
+            data[i] = torch.Tensor(tokenizer.encode(data[i]), dtype=torch.float32)
 
         for epoch in tqdm.tqdm(range(epochs)):
             for i in data:
